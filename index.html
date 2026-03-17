@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI">
+    
+    <title>Hintergrund Entferner Pro</title>
+    
+    <style>
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-color: #0A84FF;
+            --text-color: #ffffff;
+            --text-muted: #8e8e93;
+            --danger-color: #FF453A;
+            --product-bg: #e8e8e8; /* Das eBay-artige Grau für den Hintergrund */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            -webkit-font-smoothing: antialiased;
+            padding-bottom: 100px; /* Platz für die untere Leiste */
+        }
+
+        header {
+            padding: 20px 15px 10px 15px;
+            position: sticky;
+            top: 0;
+            background-color: rgba(18, 18, 18, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .header-actions button {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+
+        .header-actions button:disabled {
+            color: #555;
+        }
+
+        #gallery {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            padding: 15px;
+        }
+
+        .image-card {
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 3/4;
+            display: flex;
+            flex-direction: column;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .image-card.selected {
+            border-color: var(--primary-color);
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: var(--surface-color); /* Platzhalter bevor grau kommt */
+        }
+
+        .image-card.done img {
+            background-color: var(--product-bg); /* Grauer Hintergrund nach Bearbeitung */
+        }
+
+        .select-circle {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            background-color: rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .image-card.selected .select-circle {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .image-card.selected .select-circle::after {
+            content: "✓";
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .status-loading { color: #FFD60A; }
+        .status-done { color: #32D74B; }
+        .status-error { color: #FF453A; }
+
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: var(--surface-color);
+            padding: 15px 20px;
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+            display: flex;
+            gap: 10px;
+            border-top: 1px solid #333;
+            z-index: 100;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: rgba(255, 69, 58, 0.1);
+            color: var(--danger-color);
+        }
+
+        .btn:active { opacity: 0.8; }
+        .btn:disabled { opacity: 0.5; pointer-events: none; }
+
+        input[type="file"] { display: none; }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--text-muted);
+        }
+
+        /* Spinner für Ladestatus auf den Bildern */
+        .spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 214, 10, 0.3);
+            border-top: 2px solid #FFD60A;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Globale Ladeanzeige für die KI-Bibliothek */
+        #globalLoading {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+            display: none;
+        }
+    </style>
+    
+    <script src="https://unpkg.com/@imgly/background-removal@1.4.5/dist/browser/umd/index.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Freisteller</h1>
+        <div class="header-actions">
+            <button id="selectAllBtn">Alle wählen</button>
+        </div>
+    </header>
+
+    <div id="globalLoading">Initialisiere KI-Modell...</div>
+
+    <div id="gallery">
+        <div class="empty-state" id="emptyState">
+            <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
+            <p>Keine Bilder vorhanden.</p>
+            <p style="font-size: 14px;">Tippe unten auf "Bilder hinzufügen", um zu starten.</p>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <label for="fileInput" class="btn btn-primary" id="addBtn">
+            ➕ Hinzufügen
+        </label>
+        <input type="file" id="fileInput" multiple accept="image/*">
+        
+        <button class="btn btn-danger" id="deleteBtn" style="display: none;">
+            🗑 Löschen
+        </button>
+        
+        <button class="btn btn-primary" id="saveBtn" style="display: none;">
+            📤 Speichern
+        </button>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const gallery = document.getElementById('gallery');
+        const emptyState = document.getElementById('emptyState');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const addBtn = document.getElementById('addBtn');
+        const globalLoading = document.getElementById('globalLoading');
+
+        let imagesData = [];
+        let isProcessingQueue = false;
+
+        // Eindeutige ID generieren
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        // Bilder über den Datei-Dialog hinzufügen
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            files.forEach(file => {
+                const id = generateId();
+                const objUrl = URL.createObjectURL(file);
+                
+                imagesData.push({
+                    id: id,
+                    file: file,
+                    originalUrl: objUrl,
+                    finalBlob: null,
+                    finalUrl: null,
+                    status: 'pending', // pending, processing, done, error
+                    selected: false
+                });
+            });
+
+            fileInput.value = ''; // Input zurücksetzen
+            renderGallery();
+            processQueue();
+        });
+
+        // Klick auf ein Bild (Auswählen / Abwählen)
+        gallery.addEventListener('click', (e) => {
+            const card = e.target.closest('.image-card');
+            if (!card) return;
+
+            const id = card.dataset.id;
+            const imgData = imagesData.find(img => img.id === id);
+            
+            if (imgData) {
+                imgData.selected = !imgData.selected;
+                renderGallery();
+            }
+        });
+
+        // Alle Auswählen / Aufheben
+        selectAllBtn.addEventListener('click', () => {
+            const allSelected = imagesData.length > 0 && imagesData.every(img => img.selected);
+            imagesData.forEach(img => {
+                img.selected = !allSelected;
+            });
+            renderGallery();
+        });
+
+        // Ausgewählte Löschen
+        deleteBtn.addEventListener('click', () => {
+            const toDelete = imagesData.filter(img => img.selected);
+            toDelete.forEach(img => {
+                if (img.originalUrl) URL.revokeObjectURL(img.originalUrl);
+                if (img.finalUrl) URL.revokeObjectURL(img.finalUrl);
+            });
+            
+            imagesData = imagesData.filter(img => !img.selected);
+            renderGallery();
+        });
+
+        // Ausgewählte Speichern (iOS Share Trick)
+        saveBtn.addEventListener('click', async () => {
+            const selectedDone = imagesData.filter(img => img.selected && img.status === 'done');
+            
+            if (selectedDone.length === 0) {
+                alert('Bitte wähle mindestens ein fertig bearbeitetes Bild aus.');
+                return;
+            }
+
+            // Wir konvertieren die finalen Blobs in File-Objekte
+            const filesToShare = selectedDone.map((img, index) => {
+                return new File([img.finalBlob], `produktbild_${index + 1}.jpg`, { type: 'image/jpeg' });
+            });
+
+            if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
+                try {
+                    await navigator.share({
+                        files: filesToShare,
+                        title: 'Freigestellte Bilder'
+                    });
+                    // Nach erfolgreichem Teilen die Auswahl aufheben
+                    imagesData.forEach(img => img.selected = false);
+                    renderGallery();
+                } catch (err) {
+                    console.log('Teilen abgebrochen', err);
+                }
+            } else {
+                alert('Dein Gerät unterstützt die direkte Speichern-Funktion nicht. Die Bilder werden einzeln heruntergeladen.');
+                // Fallback für Desktop/alte Browser
+                selectedDone.forEach((img, index) => {
+                    const a = document.createElement('a');
+                    a.href = img.finalUrl;
+                    a.download = `produktbild_${index + 1}.jpg`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            }
+        });
+
+        // UI aktualisieren
+        function renderGallery() {
+            if (imagesData.length === 0) {
+                emptyState.style.display = 'block';
+                gallery.innerHTML = '';
+                gallery.appendChild(emptyState);
+                deleteBtn.style.display = 'none';
+                saveBtn.style.display = 'none';
+                addBtn.style.display = 'flex';
+                selectAllBtn.style.display = 'none';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            selectAllBtn.style.display = 'block';
+            
+            // Buttons unten anpassen
+            const hasSelected = imagesData.some(img => img.selected);
+            if (hasSelected) {
+                addBtn.style.display = 'none';
+                deleteBtn.style.display = 'flex';
+                saveBtn.style.display = 'flex';
+            } else {
+                addBtn.style.display = 'flex';
+                deleteBtn.style.display = 'none';
+                saveBtn.style.display = 'none';
+            }
+
+            // Neu rendern
+            gallery.innerHTML = '';
+            imagesData.forEach(img => {
+                const card = document.createElement('div');
+                card.className = `image-card ${img.selected ? 'selected' : ''} ${img.status === 'done' ? 'done' : ''}`;
+                card.dataset.id = img.id;
+
+                let statusHtml = '';
+                if (img.status === 'pending') {
+                    statusHtml = `<div class="status-badge status-loading">Wartet...</div>`;
+                } else if (img.status === 'processing') {
+                    statusHtml = `<div class="status-badge status-loading"><div class="spinner"></div>Bearbeitet</div>`;
+                } else if (img.status === 'error') {
+                    statusHtml = `<div class="status-badge status-error">Fehler</div>`;
+                }
+
+                // Zeige Original an, solange nicht fertig. Wenn fertig, zeige das Ergebnis (grauer HG wird durch CSS oder Bild selbst bestimmt)
+                const imgSrc = img.status === 'done' ? img.finalUrl : img.originalUrl;
+
+                card.innerHTML = `
+                    ${statusHtml}
+                    <img src="${imgSrc}" alt="Produkt">
+                    <div class="select-circle"></div>
+                `;
+                
+                gallery.appendChild(card);
+            });
+        }
+
+        // Warteschlange abarbeiten (immer nur 1 Bild gleichzeitig, um iOS Safari nicht zu crashen)
+        async function processQueue() {
+            if (isProcessingQueue) return;
+            isProcessingQueue = true;
+
+            for (let i = 0; i < imagesData.length; i++) {
+                if (imagesData[i].status === 'pending') {
+                    const imgObj = imagesData[i];
+                    imgObj.status = 'processing';
+                    renderGallery();
+
+                    if (i === 0) globalLoading.style.display = 'block'; // Kurze Info beim allerersten Bild
+
+                    try {
+                        // 1. KI: Hintergrund entfernen (Ergebnis ist transparentes PNG)
+                        const transparentBlob = await imglyRemoveBackground(imgObj.file);
+                        
+                        // 2. Transparenz durch das graue eBay/Produkt-Grau ersetzen
+                        const finalBlob = await addGrayBackground(transparentBlob);
+                        
+                        imgObj.finalBlob = finalBlob;
+                        imgObj.finalUrl = URL.createObjectURL(finalBlob);
+                        imgObj.status = 'done';
+                    } catch (error) {
+                        console.error("Fehler bei Bild " + imgObj.id, error);
+                        imgObj.status = 'error';
+                    }
+                    
+                    globalLoading.style.display = 'none';
+                    renderGallery();
+                }
+            }
+
+            isProcessingQueue = false;
+        }
+
+        // Hilfsfunktion: Setzt ein transparentes Bild auf eine graue Leinwand und gibt es als JPG zurück
+        function addGrayBackground(transparentBlob) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    // Den grauen Hintergrund zeichnen (#e8e8e8)
+                    ctx.fillStyle = '#e8e8e8';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Das freigestellte Bild darüberlegen
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Als JPG mit hoher Qualität exportieren (spart Speicher im Vergleich zu PNG)
+                    canvas.toBlob((blob) => {
+                        resolve(blob);
+                    }, 'image/jpeg', 0.95);
+                };
+                img.onerror = reject;
+                img.src = URL.createObjectURL(transparentBlob);
+            });
+        }
+    </script>
+</body>
+</html>
