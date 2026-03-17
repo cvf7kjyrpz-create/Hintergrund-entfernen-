@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI v5">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v6">
     
-    <title>Hintergrund Entferner Pro - v5</title>
+    <title>Hintergrund Entferner Pro - v6</title>
     
     <style>
         :root {
@@ -18,6 +18,8 @@
             --text-muted: #8e8e93;
             --danger-color: #FF453A;
             --product-bg: #e8e8e8;
+            --warning-bg: #3a2a00;
+            --warning-text: #FFD60A;
         }
 
         body {
@@ -27,7 +29,7 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             -webkit-font-smoothing: antialiased;
-            padding-bottom: 100px;
+            padding-bottom: 120px;
         }
 
         header {
@@ -61,6 +63,18 @@
 
         .header-actions button:disabled {
             color: #555;
+        }
+
+        #blockerWarning {
+            display: none;
+            background-color: var(--warning-bg);
+            color: var(--warning-text);
+            padding: 15px;
+            margin: 15px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid rgba(255, 214, 10, 0.3);
         }
 
         #gallery {
@@ -185,6 +199,7 @@
             opacity: 0.5; 
             pointer-events: none; 
             background-color: #555;
+            color: #aaa;
         }
 
         .btn:active { opacity: 0.8; }
@@ -223,16 +238,24 @@
         }
     </style>
 
-    <script id="ki-script" src="https://unpkg.com/@imgly/background-removal@1.4.3/dist/browser/umd/index.js" crossorigin="anonymous"></script>
+    <script id="ki-script" src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.3/dist/browser/umd/index.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>Freisteller v5</h1>
+        <h1>Freisteller v6</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
     </header>
+
+    <div id="blockerWarning">
+        <strong>⚠️ Safari blockiert die KI!</strong><br><br>
+        Dein Browser verhindert das Laden der App. So löst du das:<br>
+        1. Tippe oben in der Safari-Adressleiste auf das <strong>"aA"</strong> Symbol.<br>
+        2. Wähle <strong>"Inhaltsblocker deaktivieren"</strong> oder <strong>"Tracking-Schutz deaktivieren"</strong>.<br>
+        3. Lade die Seite neu.
+    </div>
 
     <div id="globalLoading">KI-Modell wird geladen (~40MB)...</div>
 
@@ -240,7 +263,7 @@
         <div class="empty-state" id="emptyState">
             <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
             <p>Keine Bilder vorhanden.</p>
-            <p style="font-size: 14px;">Warte einen Moment, bis die KI bereit ist.</p>
+            <p style="font-size: 14px;" id="statusText">Warte einen Moment, bis die KI bereit ist.</p>
         </div>
     </div>
 
@@ -269,13 +292,27 @@
         const addBtn = document.getElementById('addBtn');
         const globalLoading = document.getElementById('globalLoading');
         const kiScript = document.getElementById('ki-script');
+        const blockerWarning = document.getElementById('blockerWarning');
+        const statusText = document.getElementById('statusText');
 
         let imagesData = [];
         let isProcessingQueue = false;
+        let scriptLoaded = false;
 
-        // Sicherheits-Sperre: Button erst freigeben, wenn das Skript wirklich da ist
+        // Timer: Wenn das Skript nach 5 Sekunden nicht da ist, zeige die Safari-Anleitung
+        const loadTimer = setTimeout(() => {
+            if (!scriptLoaded && typeof imglyRemoveBackground === 'undefined') {
+                blockerWarning.style.display = 'block';
+                statusText.innerHTML = "Laden fehlgeschlagen. Bitte folge der Anleitung oben.";
+                addBtn.innerHTML = '❌ Blockiert';
+            }
+        }, 5000);
+
         kiScript.addEventListener('load', () => {
-            console.log("KI-Skript erfolgreich geladen!");
+            scriptLoaded = true;
+            clearTimeout(loadTimer);
+            blockerWarning.style.display = 'none';
+            statusText.innerHTML = "KI ist bereit! Tippe unten auf Hinzufügen.";
             addBtn.classList.remove('disabled');
             addBtn.classList.add('btn-primary');
             addBtn.innerHTML = '➕ Hinzufügen';
@@ -283,13 +320,17 @@
         });
 
         kiScript.addEventListener('error', () => {
-            console.error("KI-Skript konnte nicht geladen werden.");
-            addBtn.innerHTML = '❌ KI Blockiert';
-            alert('Achtung: Safari oder dein Netzwerk blockiert das KI-Skript! Bitte deaktiviere Content-Blocker (AdBlocker) für diese Seite oder prüfe deine Internetverbindung.');
+            clearTimeout(loadTimer);
+            blockerWarning.style.display = 'block';
+            statusText.innerHTML = "Skript-Fehler. Bitte folge der Anleitung oben.";
+            addBtn.innerHTML = '❌ Blockiert';
         });
 
-        // Falls das Skript schon aus dem Cache geladen war, bevor das JS hier greift
         if (typeof imglyRemoveBackground !== 'undefined') {
+            scriptLoaded = true;
+            clearTimeout(loadTimer);
+            blockerWarning.style.display = 'none';
+            statusText.innerHTML = "KI ist bereit! Tippe unten auf Hinzufügen.";
             addBtn.classList.remove('disabled');
             addBtn.classList.add('btn-primary');
             addBtn.innerHTML = '➕ Hinzufügen';
@@ -400,7 +441,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder v5'
+                        title: 'Freigestellte Bilder v6'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -484,7 +525,7 @@
                     if (typeof imglyRemoveBackground === 'undefined') {
                         imgObj.status = 'error';
                         renderGallery();
-                        alert("Das KI-Skript ist verschwunden. Bitte lade die Seite neu.");
+                        alert("Das KI-Skript ist nicht geladen.");
                         isProcessingQueue = false;
                         return;
                     }
@@ -497,9 +538,8 @@
                     try {
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
-                        // Pfad für Version 1.4.3
                         const config = {
-                            publicPath: 'https://unpkg.com/@imgly/background-removal@1.4.3/dist/'
+                            publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.3/dist/'
                         };
                         
                         const transparentBlob = await imglyRemoveBackground(resizedBlob, config);
