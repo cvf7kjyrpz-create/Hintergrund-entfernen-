@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI v9">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v10">
     
-    <title>Hintergrund Entferner Pro - v9</title>
+    <title>Hintergrund Entferner Pro - v10</title>
     
     <style>
         :root {
@@ -242,13 +242,13 @@
 <body>
 
     <header>
-        <h1>Freisteller v9</h1>
+        <h1>Freisteller v10</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
     </header>
 
-    <div id="debugConsole">System-Log (v9) gestartet...<br>Fehlerprotokoll ist aktiv.<br></div>
+    <div id="debugConsole">System-Log (v10) gestartet...<br>Umgehe Netzwerk-Blockaden...<br></div>
 
     <div id="globalLoading">KI-Modell wird heruntergeladen (~40MB)...</div>
 
@@ -256,7 +256,7 @@
         <div class="empty-state" id="emptyState">
             <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
             <p>Keine Bilder vorhanden.</p>
-            <p style="font-size: 14px;" id="statusText">Suche funktionierende KI-Version...</p>
+            <p style="font-size: 14px;" id="statusText">Suche offenen Server...</p>
         </div>
     </div>
 
@@ -276,7 +276,6 @@
     </div>
 
     <script>
-        // 1. FEHLER-PROTOKOLLIERUNG ZUERST STARTEN
         const debugConsole = document.getElementById('debugConsole');
         function logMsg(msg, isError = false) {
             const time = new Date().toLocaleTimeString();
@@ -295,7 +294,6 @@
             logMsg('PROMISE CRASH: ' + (e.reason ? e.reason.message || e.reason : 'Unbekannter Fehler'), true); 
         });
 
-        // 2. APP STEUERUNG
         const fileInput = document.getElementById('fileInput');
         const gallery = document.getElementById('gallery');
         const emptyState = document.getElementById('emptyState');
@@ -318,62 +316,66 @@
             statusText.innerHTML = "App ist bereit! Tippe unten auf Hinzufügen.";
         }
 
-        // 3. AUTO-LOADER FÜR KI-VERSIONEN (Ausschluss bekannter defekter Versionen)
-        const versionsToTry = ['1.3.0', '1.2.1', '1.2.0', '1.1.1', '1.0.4'];
-        let currentVIndex = 0;
+        // 3. SERVER-HOPPER: Testet verschiedene Content Delivery Networks für die stabile Version 1.2.0
+        const serversToTry = [
+            { name: "UNPKG", url: "https://unpkg.com/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://unpkg.com/@imgly/background-removal@1.2.0/dist/" },
+            { name: "JSDELIVR", url: "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/" },
+            { name: "FASTLY", url: "https://fastly.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://fastly.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/" }
+        ];
+        
+        let currentSIndex = 0;
 
-        function tryNextVersion() {
-            if (currentVIndex >= versionsToTry.length) {
-                logMsg("❌ Alle Versionen sind fehlgeschlagen.", true);
-                addBtn.innerHTML = '❌ Defekt';
-                statusText.innerHTML = "Fehler: Keine kompatible KI gefunden.";
+        function tryNextServer() {
+            if (currentSIndex >= serversToTry.length) {
+                logMsg("❌ Dein iPhone blockiert alle unsere Server.", true);
+                logMsg("Tipp: Schalte 'Privat-Relay' in den iCloud-Einstellungen aus.", true);
+                addBtn.innerHTML = '❌ Blockiert';
+                statusText.innerHTML = "Netzwerk-Blockade aktiv.";
                 return;
             }
 
             currentScriptError = null;
-            const ver = versionsToTry[currentVIndex];
-            logMsg(`⏳ Teste Version ${ver}...`);
+            const server = serversToTry[currentSIndex];
+            logMsg(`⏳ Teste Server: ${server.name}...`);
             
             const script = document.createElement('script');
-            script.src = `https://cdn.jsdelivr.net/npm/@imgly/background-removal@${ver}/dist/browser/umd/index.js`;
+            // Cache-Buster hinzufügen, um alte kaputte Ladeversuche zu umgehen
+            script.src = server.url + '?t=' + new Date().getTime();
+            script.crossOrigin = "anonymous";
             
             script.onload = () => {
                 if (currentScriptError) {
-                    logMsg(`Version ${ver} hat interne Fehler, überspringe.`, true);
-                    currentVIndex++;
-                    tryNextVersion();
+                    logMsg(`${server.name} geladen, hat aber interne Fehler.`, true);
+                    currentSIndex++;
+                    tryNextServer();
                     return;
                 }
 
                 let bgTool = window.imglyRemoveBackground || window.removeBackground;
                 if (typeof bgTool === 'function') {
-                    logMsg(`Version ${ver} ist kompatibel!`);
+                    logMsg(`Erfolg! Verbunden mit ${server.name}.`);
                     window.removeBgTool = bgTool;
-                    // Konfiguration für exakt diese Version setzen
-                    window.bgToolConfig = {
-                        publicPath: `https://cdn.jsdelivr.net/npm/@imgly/background-removal@${ver}/dist/`
-                    };
+                    window.bgToolConfig = { publicPath: server.base };
                     enableApp();
                 } else {
-                    logMsg(`Version ${ver} ungültig (Funktion fehlt).`, true);
-                    currentVIndex++;
-                    tryNextVersion();
+                    logMsg(`Verbindung zu ${server.name} fehlerhaft.`, true);
+                    currentSIndex++;
+                    tryNextServer();
                 }
             };
 
             script.onerror = () => {
-                logMsg(`Netzwerkfehler bei Version ${ver}.`, true);
-                currentVIndex++;
-                tryNextVersion();
+                logMsg(`iPhone blockiert ${server.name}.`, true);
+                currentSIndex++;
+                tryNextServer();
             };
 
             document.head.appendChild(script);
         }
 
-        // Auto-Loader direkt starten
-        tryNextVersion();
+        // Hopper starten
+        tryNextServer();
 
-        // 4. BILDER, WARTESCHLANGE & VERARBEITUNG
         function generateId() {
             return Math.random().toString(36).substr(2, 9);
         }
@@ -478,7 +480,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder v9'
+                        title: 'Freigestellte Bilder v10'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -573,13 +575,13 @@
                     if (i === 0) globalLoading.style.display = 'block'; 
 
                     try {
-                        logMsg(`Starte Bildverarbeitung...`);
+                        logMsg(`Bild wird vorbereitet...`);
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
-                        logMsg("Sende Bild an KI...");
+                        logMsg("Lade KI-Gehirn herunter (einmalig)...");
                         const transparentBlob = await window.removeBgTool(resizedBlob, window.bgToolConfig);
                         
-                        logMsg("Bild erfolgreich freigestellt. Setze Hintergrund...");
+                        logMsg("Bild freigestellt. Setze Hintergrund...");
                         const finalBlob = await addGrayBackground(transparentBlob);
                         
                         imgObj.finalBlob = finalBlob;
