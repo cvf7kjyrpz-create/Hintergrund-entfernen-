@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI v4">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v5">
     
-    <title>Hintergrund Entferner Pro - v4</title>
+    <title>Hintergrund Entferner Pro - v5</title>
     
     <style>
         :root {
@@ -181,6 +181,12 @@
             color: var(--danger-color);
         }
 
+        .btn.disabled { 
+            opacity: 0.5; 
+            pointer-events: none; 
+            background-color: #555;
+        }
+
         .btn:active { opacity: 0.8; }
         .btn:disabled { opacity: 0.5; pointer-events: none; }
 
@@ -217,12 +223,12 @@
         }
     </style>
 
-    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/browser/umd/index.js"></script>
+    <script id="ki-script" src="https://unpkg.com/@imgly/background-removal@1.4.3/dist/browser/umd/index.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
     <header>
-        <h1>Freisteller v4</h1>
+        <h1>Freisteller v5</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
@@ -234,15 +240,15 @@
         <div class="empty-state" id="emptyState">
             <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
             <p>Keine Bilder vorhanden.</p>
-            <p style="font-size: 14px;">Tippe unten auf "Bilder hinzufügen", um zu starten.</p>
+            <p style="font-size: 14px;">Warte einen Moment, bis die KI bereit ist.</p>
         </div>
     </div>
 
     <div class="bottom-bar">
-        <label for="fileInput" class="btn btn-primary" id="addBtn">
-            ➕ Hinzufügen
+        <label for="fileInput" class="btn disabled" id="addBtn">
+            ⏳ Lade KI...
         </label>
-        <input type="file" id="fileInput" multiple accept="image/*">
+        <input type="file" id="fileInput" multiple accept="image/*" disabled>
         
         <button class="btn btn-danger" id="deleteBtn" style="display: none;">
             🗑 Löschen
@@ -262,9 +268,33 @@
         const saveBtn = document.getElementById('saveBtn');
         const addBtn = document.getElementById('addBtn');
         const globalLoading = document.getElementById('globalLoading');
+        const kiScript = document.getElementById('ki-script');
 
         let imagesData = [];
         let isProcessingQueue = false;
+
+        // Sicherheits-Sperre: Button erst freigeben, wenn das Skript wirklich da ist
+        kiScript.addEventListener('load', () => {
+            console.log("KI-Skript erfolgreich geladen!");
+            addBtn.classList.remove('disabled');
+            addBtn.classList.add('btn-primary');
+            addBtn.innerHTML = '➕ Hinzufügen';
+            fileInput.disabled = false;
+        });
+
+        kiScript.addEventListener('error', () => {
+            console.error("KI-Skript konnte nicht geladen werden.");
+            addBtn.innerHTML = '❌ KI Blockiert';
+            alert('Achtung: Safari oder dein Netzwerk blockiert das KI-Skript! Bitte deaktiviere Content-Blocker (AdBlocker) für diese Seite oder prüfe deine Internetverbindung.');
+        });
+
+        // Falls das Skript schon aus dem Cache geladen war, bevor das JS hier greift
+        if (typeof imglyRemoveBackground !== 'undefined') {
+            addBtn.classList.remove('disabled');
+            addBtn.classList.add('btn-primary');
+            addBtn.innerHTML = '➕ Hinzufügen';
+            fileInput.disabled = false;
+        }
 
         function generateId() {
             return Math.random().toString(36).substr(2, 9);
@@ -370,7 +400,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder v4'
+                        title: 'Freigestellte Bilder v5'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -451,11 +481,10 @@
                 if (imagesData[i].status === 'pending') {
                     const imgObj = imagesData[i];
                     
-                    // Sicherheitscheck: Wurde die KI-Bibliothek wirklich geladen?
                     if (typeof imglyRemoveBackground === 'undefined') {
                         imgObj.status = 'error';
                         renderGallery();
-                        alert("Das KI-Skript wurde noch nicht vollständig geladen oder blockiert. Bitte lade die Seite einmal neu oder deaktiviere Content-Blocker in Safari für diese Seite.");
+                        alert("Das KI-Skript ist verschwunden. Bitte lade die Seite neu.");
                         isProcessingQueue = false;
                         return;
                     }
@@ -468,9 +497,9 @@
                     try {
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
-                        // Exakter Pfad zum jsDelivr CDN
+                        // Pfad für Version 1.4.3
                         const config = {
-                            publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/'
+                            publicPath: 'https://unpkg.com/@imgly/background-removal@1.4.3/dist/'
                         };
                         
                         const transparentBlob = await imglyRemoveBackground(resizedBlob, config);
