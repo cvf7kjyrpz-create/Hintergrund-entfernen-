@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v4">
     
-    <title>Hintergrund Entferner Pro</title>
+    <title>Hintergrund Entferner Pro - v4</title>
     
     <style>
         :root {
@@ -216,17 +216,19 @@
             line-height: 1.5;
         }
     </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/browser/umd/index.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>Freisteller</h1>
+        <h1>Freisteller v4</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
     </header>
 
-    <div id="globalLoading">Bereite KI vor...</div>
+    <div id="globalLoading">KI-Modell wird geladen (~40MB)...</div>
 
     <div id="gallery">
         <div class="empty-state" id="emptyState">
@@ -268,7 +270,6 @@
             return Math.random().toString(36).substr(2, 9);
         }
 
-        // Funktion zum Verkleinern der Bilder vor der KI-Verarbeitung (schont den iOS RAM)
         function resizeImage(file, maxWidth, maxHeight) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -369,7 +370,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder'
+                        title: 'Freigestellte Bilder v4'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -449,34 +450,30 @@
             for (let i = 0; i < imagesData.length; i++) {
                 if (imagesData[i].status === 'pending') {
                     const imgObj = imagesData[i];
+                    
+                    // Sicherheitscheck: Wurde die KI-Bibliothek wirklich geladen?
+                    if (typeof imglyRemoveBackground === 'undefined') {
+                        imgObj.status = 'error';
+                        renderGallery();
+                        alert("Das KI-Skript wurde noch nicht vollständig geladen oder blockiert. Bitte lade die Seite einmal neu oder deaktiviere Content-Blocker in Safari für diese Seite.");
+                        isProcessingQueue = false;
+                        return;
+                    }
+
                     imgObj.status = 'processing';
                     renderGallery();
 
                     if (i === 0) globalLoading.style.display = 'block'; 
 
                     try {
-                        // NEU: Die KI wird jetzt exakt hier, im Moment des Bearbeitens, geladen (ESM-Modul).
-                        // Das verhindert, dass das iPhone das Skript beim Starten ignoriert.
-                        if (typeof window.imglyRemoveBackground === 'undefined') {
-                            globalLoading.innerHTML = "Lade KI-Software...<br><span style='color:var(--text-muted); font-size:12px;'>Passiert nur beim ersten Start.</span>";
-                            const module = await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm");
-                            window.imglyRemoveBackground = module.default || module.removeBackground;
-                        }
-
-                        globalLoading.innerHTML = "Lade Gehirn der KI herunter...<br><span style='color:var(--text-muted); font-size:12px;'>(~40MB, bitte kurz warten)</span>";
-
-                        // 1. Bild vor der Verarbeitung verkleinern, um RAM-Abstürze zu verhindern
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
-                        // 2. Offizieller Server-Pfad für die KI-Modelle
+                        // Exakter Pfad zum jsDelivr CDN
                         const config = {
                             publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/'
                         };
                         
-                        // 3. KI: Hintergrund entfernen
-                        const transparentBlob = await window.imglyRemoveBackground(resizedBlob, config);
-                        
-                        // 4. Transparenz durch grauen Hintergrund ersetzen
+                        const transparentBlob = await imglyRemoveBackground(resizedBlob, config);
                         const finalBlob = await addGrayBackground(transparentBlob);
                         
                         imgObj.finalBlob = finalBlob;
