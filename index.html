@@ -228,7 +228,7 @@
         </div>
     </header>
 
-    <div id="globalLoading">Initialisiere KI-Modell...</div>
+    <div id="globalLoading">Lade KI-Modell herunter (einmalig, bitte warten)...</div>
 
     <div id="gallery">
         <div class="empty-state" id="emptyState">
@@ -415,7 +415,7 @@
                     statusHtml = `<div class="status-badge status-error">Fehler</div>`;
                 }
 
-                // Zeige Original an, solange nicht fertig. Wenn fertig, zeige das Ergebnis (grauer HG wird durch CSS oder Bild selbst bestimmt)
+                // Zeige Original an, solange nicht fertig. Wenn fertig, zeige das Ergebnis
                 const imgSrc = img.status === 'done' ? img.finalUrl : img.originalUrl;
 
                 card.innerHTML = `
@@ -428,7 +428,7 @@
             });
         }
 
-        // Warteschlange abarbeiten (immer nur 1 Bild gleichzeitig, um iOS Safari nicht zu crashen)
+        // Warteschlange abarbeiten
         async function processQueue() {
             if (isProcessingQueue) return;
             isProcessingQueue = true;
@@ -439,11 +439,16 @@
                     imgObj.status = 'processing';
                     renderGallery();
 
-                    if (i === 0) globalLoading.style.display = 'block'; // Kurze Info beim allerersten Bild
+                    if (i === 0) globalLoading.style.display = 'block'; 
 
                     try {
+                        // FIX: Hier sagen wir der KI jetzt genau, wo sie ihre Dateien aus dem Internet laden soll
+                        const config = {
+                            publicPath: 'https://unpkg.com/@imgly/background-removal@1.4.5/dist/'
+                        };
+                        
                         // 1. KI: Hintergrund entfernen (Ergebnis ist transparentes PNG)
-                        const transparentBlob = await imglyRemoveBackground(imgObj.file);
+                        const transparentBlob = await imglyRemoveBackground(imgObj.file, config);
                         
                         // 2. Transparenz durch das graue eBay/Produkt-Grau ersetzen
                         const finalBlob = await addGrayBackground(transparentBlob);
@@ -464,7 +469,7 @@
             isProcessingQueue = false;
         }
 
-        // Hilfsfunktion: Setzt ein transparentes Bild auf eine graue Leinwand und gibt es als JPG zurück
+        // Hilfsfunktion: Setzt ein transparentes Bild auf eine graue Leinwand
         function addGrayBackground(transparentBlob) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -481,7 +486,7 @@
                     // Das freigestellte Bild darüberlegen
                     ctx.drawImage(img, 0, 0);
                     
-                    // Als JPG mit hoher Qualität exportieren (spart Speicher im Vergleich zu PNG)
+                    // Als JPG exportieren
                     canvas.toBlob((blob) => {
                         resolve(blob);
                     }, 'image/jpeg', 0.95);
