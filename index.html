@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI v10">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v11">
     
-    <title>Hintergrund Entferner Pro - v10</title>
+    <title>Hintergrund Entferner Pro - v11</title>
     
     <style>
         :root {
@@ -242,13 +242,13 @@
 <body>
 
     <header>
-        <h1>Freisteller v10</h1>
+        <h1>Freisteller v11</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
     </header>
 
-    <div id="debugConsole">System-Log (v10) gestartet...<br>Umgehe Netzwerk-Blockaden...<br></div>
+    <div id="debugConsole">System-Log (v11) gestartet...<br>Nutze sichere Apple-Import-Methode.<br></div>
 
     <div id="globalLoading">KI-Modell wird heruntergeladen (~40MB)...</div>
 
@@ -256,7 +256,7 @@
         <div class="empty-state" id="emptyState">
             <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
             <p>Keine Bilder vorhanden.</p>
-            <p style="font-size: 14px;" id="statusText">Suche offenen Server...</p>
+            <p style="font-size: 14px;" id="statusText">Verbinde zur KI...</p>
         </div>
     </div>
 
@@ -275,7 +275,7 @@
         </button>
     </div>
 
-    <script>
+    <script type="module">
         const debugConsole = document.getElementById('debugConsole');
         function logMsg(msg, isError = false) {
             const time = new Date().toLocaleTimeString();
@@ -284,16 +284,47 @@
             debugConsole.scrollTop = debugConsole.scrollHeight;
         }
 
-        let currentScriptError = null;
+        window.addEventListener('error', function(e) { logMsg('CRASH: ' + e.message, true); });
+        window.addEventListener('unhandledrejection', function(e) { logMsg('PROMISE CRASH: ' + (e.reason ? e.reason.message || e.reason : 'Unbekannter Fehler'), true); });
 
-        window.addEventListener('error', function(e) { 
-            currentScriptError = e.message;
-            logMsg('CRASH: ' + e.message, true); 
-        });
-        window.addEventListener('unhandledrejection', function(e) { 
-            logMsg('PROMISE CRASH: ' + (e.reason ? e.reason.message || e.reason : 'Unbekannter Fehler'), true); 
-        });
+        async function initKI() {
+            logMsg("Lade die stabile Version 1.2.1...");
+            try {
+                // Der native Import, den Safari akzeptiert. Hier nutzen wir die fehlerfreie Version 1.2.1
+                const imglyModule = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.1/+esm');
+                
+                logMsg("Modul heruntergeladen. Verknüpfe KI...");
+                
+                window.removeBgTool = imglyModule.default || imglyModule.removeBackground;
+                window.bgToolConfig = {
+                    publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.1/dist/'
+                };
 
+                if (typeof window.removeBgTool === 'function') {
+                    logMsg("✅ App erfolgreich entsperrt und bereit!");
+                    
+                    const addBtn = document.getElementById('addBtn');
+                    const fileInput = document.getElementById('fileInput');
+                    const statusText = document.getElementById('statusText');
+                    
+                    addBtn.classList.remove('disabled');
+                    addBtn.classList.add('btn-primary');
+                    addBtn.innerHTML = '➕ Hinzufügen';
+                    fileInput.disabled = false;
+                    statusText.innerHTML = "App ist bereit! Tippe unten auf Hinzufügen.";
+                } else {
+                    logMsg("Fehler: KI-Funktion nicht gefunden.", true);
+                }
+            } catch (error) {
+                logMsg("ABBRUCH BEIM IMPORT: " + error.message, true);
+                document.getElementById('addBtn').innerHTML = '❌ Ladefehler';
+            }
+        }
+
+        initKI();
+    </script>
+
+    <script>
         const fileInput = document.getElementById('fileInput');
         const gallery = document.getElementById('gallery');
         const emptyState = document.getElementById('emptyState');
@@ -302,79 +333,9 @@
         const saveBtn = document.getElementById('saveBtn');
         const addBtn = document.getElementById('addBtn');
         const globalLoading = document.getElementById('globalLoading');
-        const statusText = document.getElementById('statusText');
 
         let imagesData = [];
         let isProcessingQueue = false;
-
-        function enableApp() {
-            logMsg("✅ App einsatzbereit!");
-            addBtn.classList.remove('disabled');
-            addBtn.classList.add('btn-primary');
-            addBtn.innerHTML = '➕ Hinzufügen';
-            fileInput.disabled = false;
-            statusText.innerHTML = "App ist bereit! Tippe unten auf Hinzufügen.";
-        }
-
-        // 3. SERVER-HOPPER: Testet verschiedene Content Delivery Networks für die stabile Version 1.2.0
-        const serversToTry = [
-            { name: "UNPKG", url: "https://unpkg.com/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://unpkg.com/@imgly/background-removal@1.2.0/dist/" },
-            { name: "JSDELIVR", url: "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/" },
-            { name: "FASTLY", url: "https://fastly.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/browser/umd/index.js", base: "https://fastly.jsdelivr.net/npm/@imgly/background-removal@1.2.0/dist/" }
-        ];
-        
-        let currentSIndex = 0;
-
-        function tryNextServer() {
-            if (currentSIndex >= serversToTry.length) {
-                logMsg("❌ Dein iPhone blockiert alle unsere Server.", true);
-                logMsg("Tipp: Schalte 'Privat-Relay' in den iCloud-Einstellungen aus.", true);
-                addBtn.innerHTML = '❌ Blockiert';
-                statusText.innerHTML = "Netzwerk-Blockade aktiv.";
-                return;
-            }
-
-            currentScriptError = null;
-            const server = serversToTry[currentSIndex];
-            logMsg(`⏳ Teste Server: ${server.name}...`);
-            
-            const script = document.createElement('script');
-            // Cache-Buster hinzufügen, um alte kaputte Ladeversuche zu umgehen
-            script.src = server.url + '?t=' + new Date().getTime();
-            script.crossOrigin = "anonymous";
-            
-            script.onload = () => {
-                if (currentScriptError) {
-                    logMsg(`${server.name} geladen, hat aber interne Fehler.`, true);
-                    currentSIndex++;
-                    tryNextServer();
-                    return;
-                }
-
-                let bgTool = window.imglyRemoveBackground || window.removeBackground;
-                if (typeof bgTool === 'function') {
-                    logMsg(`Erfolg! Verbunden mit ${server.name}.`);
-                    window.removeBgTool = bgTool;
-                    window.bgToolConfig = { publicPath: server.base };
-                    enableApp();
-                } else {
-                    logMsg(`Verbindung zu ${server.name} fehlerhaft.`, true);
-                    currentSIndex++;
-                    tryNextServer();
-                }
-            };
-
-            script.onerror = () => {
-                logMsg(`iPhone blockiert ${server.name}.`, true);
-                currentSIndex++;
-                tryNextServer();
-            };
-
-            document.head.appendChild(script);
-        }
-
-        // Hopper starten
-        tryNextServer();
 
         function generateId() {
             return Math.random().toString(36).substr(2, 9);
@@ -480,7 +441,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder v10'
+                        title: 'Freigestellte Bilder v11'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -564,7 +525,8 @@
                     if (typeof window.removeBgTool !== 'function') {
                         imgObj.status = 'error';
                         renderGallery();
-                        logMsg("Kritischer Fehler: KI-Werkzeug ist nicht aufrufbar.", true);
+                        const debugConsole = document.getElementById('debugConsole');
+                        debugConsole.innerHTML += `<span style="color: #FF453A">[${new Date().toLocaleTimeString()}] Kritischer Fehler: KI-Werkzeug ist nicht aufrufbar.</span><br>`;
                         isProcessingQueue = false;
                         return;
                     }
@@ -575,23 +537,27 @@
                     if (i === 0) globalLoading.style.display = 'block'; 
 
                     try {
-                        logMsg(`Bild wird vorbereitet...`);
+                        const debugConsole = document.getElementById('debugConsole');
+                        debugConsole.innerHTML += `<span style="color: #32D74B">[${new Date().toLocaleTimeString()}] Bild wird vorbereitet...</span><br>`;
+                        
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
-                        logMsg("Lade KI-Gehirn herunter (einmalig)...");
+                        debugConsole.innerHTML += `<span style="color: #32D74B">[${new Date().toLocaleTimeString()}] KI rechnet... (das Gehirn wird geladen)</span><br>`;
                         const transparentBlob = await window.removeBgTool(resizedBlob, window.bgToolConfig);
                         
-                        logMsg("Bild freigestellt. Setze Hintergrund...");
+                        debugConsole.innerHTML += `<span style="color: #32D74B">[${new Date().toLocaleTimeString()}] Bild freigestellt. Setze Hintergrund...</span><br>`;
                         const finalBlob = await addGrayBackground(transparentBlob);
                         
                         imgObj.finalBlob = finalBlob;
                         imgObj.finalUrl = URL.createObjectURL(finalBlob);
                         imgObj.status = 'done';
-                        logMsg("Fertig!");
+                        
+                        debugConsole.innerHTML += `<span style="color: #32D74B">[${new Date().toLocaleTimeString()}] Fertig!</span><br>`;
                     } catch (error) {
                         console.error("Fehler bei Bild " + imgObj.id, error);
                         imgObj.status = 'error';
-                        logMsg(`[VERARBEITUNGSFEHLER] ${error.message || error}`, true);
+                        const debugConsole = document.getElementById('debugConsole');
+                        debugConsole.innerHTML += `<span style="color: #FF453A">[${new Date().toLocaleTimeString()}] [VERARBEITUNGSFEHLER] ${error.message || error}</span><br>`;
                         alert("Fehler beim Freistellen. Bitte im Log-Fenster nachschauen.");
                     }
                     
