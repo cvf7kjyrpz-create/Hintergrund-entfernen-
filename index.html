@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Bilder AI v6">
+    <meta name="apple-mobile-web-app-title" content="Bilder AI v7">
     
-    <title>Hintergrund Entferner Pro - v6</title>
+    <title>Hintergrund Entferner Pro - v7</title>
     
     <style>
         :root {
@@ -18,8 +18,7 @@
             --text-muted: #8e8e93;
             --danger-color: #FF453A;
             --product-bg: #e8e8e8;
-            --warning-bg: #3a2a00;
-            --warning-text: #FFD60A;
+            --debug-bg: #000000;
         }
 
         body {
@@ -65,16 +64,19 @@
             color: #555;
         }
 
-        #blockerWarning {
-            display: none;
-            background-color: var(--warning-bg);
-            color: var(--warning-text);
+        /* Der neue Live-Monitor für Fehlermeldungen */
+        #debugConsole {
+            background-color: var(--debug-bg);
+            color: #32D74B;
+            font-family: monospace;
+            font-size: 11px;
             padding: 15px;
             margin: 15px;
-            border-radius: 12px;
-            font-size: 14px;
-            line-height: 1.5;
-            border: 1px solid rgba(255, 214, 10, 0.3);
+            border-radius: 8px;
+            border: 1px solid #333;
+            max-height: 150px;
+            overflow-y: auto;
+            word-wrap: break-word;
         }
 
         #gallery {
@@ -210,7 +212,7 @@
         .empty-state {
             grid-column: 1 / -1;
             text-align: center;
-            padding: 50px 20px;
+            padding: 20px;
             color: var(--text-muted);
         }
 
@@ -237,33 +239,25 @@
             line-height: 1.5;
         }
     </style>
-
-    <script id="ki-script" src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.3/dist/browser/umd/index.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>Freisteller v6</h1>
+        <h1>Freisteller v7</h1>
         <div class="header-actions">
             <button id="selectAllBtn">Alle wählen</button>
         </div>
     </header>
 
-    <div id="blockerWarning">
-        <strong>⚠️ Safari blockiert die KI!</strong><br><br>
-        Dein Browser verhindert das Laden der App. So löst du das:<br>
-        1. Tippe oben in der Safari-Adressleiste auf das <strong>"aA"</strong> Symbol.<br>
-        2. Wähle <strong>"Inhaltsblocker deaktivieren"</strong> oder <strong>"Tracking-Schutz deaktivieren"</strong>.<br>
-        3. Lade die Seite neu.
-    </div>
+    <div id="debugConsole">System-Log gestartet...<br></div>
 
-    <div id="globalLoading">KI-Modell wird geladen (~40MB)...</div>
+    <div id="globalLoading">KI-Modell wird heruntergeladen...</div>
 
     <div id="gallery">
         <div class="empty-state" id="emptyState">
             <div style="font-size: 40px; margin-bottom: 10px;">📸</div>
             <p>Keine Bilder vorhanden.</p>
-            <p style="font-size: 14px;" id="statusText">Warte einen Moment, bis die KI bereit ist.</p>
+            <p style="font-size: 14px;" id="statusText">Bitte warte, bis die App bereit ist.</p>
         </div>
     </div>
 
@@ -282,7 +276,65 @@
         </button>
     </div>
 
+    <script type="module">
+        // --- DIAGNOSE-SYSTEM ---
+        const debugConsole = document.getElementById('debugConsole');
+        function logMsg(msg, isError = false) {
+            const time = new Date().toLocaleTimeString();
+            const color = isError ? '#FF453A' : '#32D74B';
+            debugConsole.innerHTML += `<span style="color: ${color}">[${time}] ${msg}</span><br>`;
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+        }
+
+        // Fange alle unsichtbaren Safari-Fehler ab
+        window.addEventListener('error', function(e) { 
+            logMsg('CRASH: ' + e.message, true); 
+        });
+        window.addEventListener('unhandledrejection', function(e) { 
+            logMsg('PROMISE CRASH: ' + (e.reason ? e.reason.message || e.reason : 'Unbekannter Fehler'), true); 
+        });
+
+        // --- KI LADEN (Modernes Modul) ---
+        async function initApp() {
+            logMsg("Prüfe Browser: " + navigator.userAgent.substring(0, 40) + "...");
+            logMsg("Versuche KI-Verbindung herzustellen...");
+            
+            try {
+                // Dynamischer Import der ESM-Version (am besten verträglich für moderne Browser)
+                const imglyModule = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.3/+esm');
+                
+                logMsg("Modul-Daten empfangen.");
+                
+                window.removeBgTool = imglyModule.default || imglyModule.removeBackground;
+                
+                if (typeof window.removeBgTool === 'function') {
+                    logMsg("KI erfolgreich initialisiert! ✅");
+                    
+                    // Button entsperren
+                    const addBtn = document.getElementById('addBtn');
+                    const fileInput = document.getElementById('fileInput');
+                    const statusText = document.getElementById('statusText');
+                    
+                    addBtn.classList.remove('disabled');
+                    addBtn.classList.add('btn-primary');
+                    addBtn.innerHTML = '➕ Hinzufügen';
+                    fileInput.disabled = false;
+                    statusText.innerHTML = "App ist bereit! Tippe unten auf Hinzufügen.";
+                } else {
+                    logMsg("Fehler: KI-Funktion im Modul nicht gefunden.", true);
+                }
+            } catch (err) {
+                logMsg("ABBRUCH BEIM LADEN: " + err.message, true);
+                document.getElementById('addBtn').innerHTML = '❌ Ladefehler';
+            }
+        }
+
+        // Ladevorgang starten
+        initApp();
+    </script>
+
     <script>
+        // --- APP LOGIK (Bilder, Galerie, Speichern) ---
         const fileInput = document.getElementById('fileInput');
         const gallery = document.getElementById('gallery');
         const emptyState = document.getElementById('emptyState');
@@ -291,51 +343,9 @@
         const saveBtn = document.getElementById('saveBtn');
         const addBtn = document.getElementById('addBtn');
         const globalLoading = document.getElementById('globalLoading');
-        const kiScript = document.getElementById('ki-script');
-        const blockerWarning = document.getElementById('blockerWarning');
-        const statusText = document.getElementById('statusText');
 
         let imagesData = [];
         let isProcessingQueue = false;
-        let scriptLoaded = false;
-
-        // Timer: Wenn das Skript nach 5 Sekunden nicht da ist, zeige die Safari-Anleitung
-        const loadTimer = setTimeout(() => {
-            if (!scriptLoaded && typeof imglyRemoveBackground === 'undefined') {
-                blockerWarning.style.display = 'block';
-                statusText.innerHTML = "Laden fehlgeschlagen. Bitte folge der Anleitung oben.";
-                addBtn.innerHTML = '❌ Blockiert';
-            }
-        }, 5000);
-
-        kiScript.addEventListener('load', () => {
-            scriptLoaded = true;
-            clearTimeout(loadTimer);
-            blockerWarning.style.display = 'none';
-            statusText.innerHTML = "KI ist bereit! Tippe unten auf Hinzufügen.";
-            addBtn.classList.remove('disabled');
-            addBtn.classList.add('btn-primary');
-            addBtn.innerHTML = '➕ Hinzufügen';
-            fileInput.disabled = false;
-        });
-
-        kiScript.addEventListener('error', () => {
-            clearTimeout(loadTimer);
-            blockerWarning.style.display = 'block';
-            statusText.innerHTML = "Skript-Fehler. Bitte folge der Anleitung oben.";
-            addBtn.innerHTML = '❌ Blockiert';
-        });
-
-        if (typeof imglyRemoveBackground !== 'undefined') {
-            scriptLoaded = true;
-            clearTimeout(loadTimer);
-            blockerWarning.style.display = 'none';
-            statusText.innerHTML = "KI ist bereit! Tippe unten auf Hinzufügen.";
-            addBtn.classList.remove('disabled');
-            addBtn.classList.add('btn-primary');
-            addBtn.innerHTML = '➕ Hinzufügen';
-            fileInput.disabled = false;
-        }
 
         function generateId() {
             return Math.random().toString(36).substr(2, 9);
@@ -441,7 +451,7 @@
                 try {
                     await navigator.share({
                         files: filesToShare,
-                        title: 'Freigestellte Bilder v6'
+                        title: 'Freigestellte Bilder v7'
                     });
                     imagesData.forEach(img => img.selected = false);
                     renderGallery();
@@ -522,10 +532,10 @@
                 if (imagesData[i].status === 'pending') {
                     const imgObj = imagesData[i];
                     
-                    if (typeof imglyRemoveBackground === 'undefined') {
+                    if (typeof window.removeBgTool !== 'function') {
                         imgObj.status = 'error';
                         renderGallery();
-                        alert("Das KI-Skript ist nicht geladen.");
+                        alert("Kritischer Fehler: KI ist nicht bereit.");
                         isProcessingQueue = false;
                         return;
                     }
@@ -542,7 +552,8 @@
                             publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.3/dist/'
                         };
                         
-                        const transparentBlob = await imglyRemoveBackground(resizedBlob, config);
+                        // Hier rufen wir das Tool jetzt über die neue Funktion auf
+                        const transparentBlob = await window.removeBgTool(resizedBlob, config);
                         const finalBlob = await addGrayBackground(transparentBlob);
                         
                         imgObj.finalBlob = finalBlob;
@@ -551,7 +562,9 @@
                     } catch (error) {
                         console.error("Fehler bei Bild " + imgObj.id, error);
                         imgObj.status = 'error';
-                        alert("Fehler bei der KI-Verarbeitung: " + (error.message || error));
+                        // Fehler auch in unser Terminal schreiben
+                        document.getElementById('debugConsole').innerHTML += `<span style="color: #FF453A">[VERARBEITUNGSFEHLER] ${error.message || error}</span><br>`;
+                        alert("Fehler beim Freistellen. Bitte im Log-Fenster nachschauen.");
                     }
                     
                     globalLoading.style.display = 'none';
