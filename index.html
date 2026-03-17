@@ -17,7 +17,7 @@
             --text-color: #ffffff;
             --text-muted: #8e8e93;
             --danger-color: #FF453A;
-            --product-bg: #e8e8e8; /* Das eBay-artige Grau für den Hintergrund */
+            --product-bg: #e8e8e8;
         }
 
         body {
@@ -27,7 +27,7 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             -webkit-font-smoothing: antialiased;
-            padding-bottom: 100px; /* Platz für die untere Leiste */
+            padding-bottom: 100px;
         }
 
         header {
@@ -213,10 +213,9 @@
             color: var(--text-muted);
             font-size: 14px;
             display: none;
+            line-height: 1.5;
         }
     </style>
-    
-    <script src="https://unpkg.com/@imgly/background-removal@1.4.5/dist/browser/umd/index.js"></script>
 </head>
 <body>
 
@@ -227,7 +226,7 @@
         </div>
     </header>
 
-    <div id="globalLoading">Lade KI-Modell herunter (einmalig, bitte warten)...</div>
+    <div id="globalLoading">Bereite KI vor...</div>
 
     <div id="gallery">
         <div class="empty-state" id="emptyState">
@@ -269,7 +268,7 @@
             return Math.random().toString(36).substr(2, 9);
         }
 
-        // NEU: Funktion zum Verkleinern der Bilder vor der KI-Verarbeitung (schont den iOS RAM)
+        // Funktion zum Verkleinern der Bilder vor der KI-Verarbeitung (schont den iOS RAM)
         function resizeImage(file, maxWidth, maxHeight) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -456,18 +455,28 @@
                     if (i === 0) globalLoading.style.display = 'block'; 
 
                     try {
-                        // 1. Bild vor der Verarbeitung auf max 1024x1024 verkleinern, um RAM-Abstürze zu verhindern
+                        // NEU: Die KI wird jetzt exakt hier, im Moment des Bearbeitens, geladen (ESM-Modul).
+                        // Das verhindert, dass das iPhone das Skript beim Starten ignoriert.
+                        if (typeof window.imglyRemoveBackground === 'undefined') {
+                            globalLoading.innerHTML = "Lade KI-Software...<br><span style='color:var(--text-muted); font-size:12px;'>Passiert nur beim ersten Start.</span>";
+                            const module = await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm");
+                            window.imglyRemoveBackground = module.default || module.removeBackground;
+                        }
+
+                        globalLoading.innerHTML = "Lade Gehirn der KI herunter...<br><span style='color:var(--text-muted); font-size:12px;'>(~40MB, bitte kurz warten)</span>";
+
+                        // 1. Bild vor der Verarbeitung verkleinern, um RAM-Abstürze zu verhindern
                         const resizedBlob = await resizeImage(imgObj.file, 1024, 1024);
                         
                         // 2. Offizieller Server-Pfad für die KI-Modelle
                         const config = {
-                            publicPath: 'https://static.imgly.com/@imgly/background-removal/1.4.5/dist/'
+                            publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/'
                         };
                         
                         // 3. KI: Hintergrund entfernen
-                        const transparentBlob = await imglyRemoveBackground(resizedBlob, config);
+                        const transparentBlob = await window.imglyRemoveBackground(resizedBlob, config);
                         
-                        // 4. Transparenz durch das graue eBay/Produkt-Grau ersetzen
+                        // 4. Transparenz durch grauen Hintergrund ersetzen
                         const finalBlob = await addGrayBackground(transparentBlob);
                         
                         imgObj.finalBlob = finalBlob;
@@ -476,7 +485,6 @@
                     } catch (error) {
                         console.error("Fehler bei Bild " + imgObj.id, error);
                         imgObj.status = 'error';
-                        // Zeigt uns genau an, was Safari blockiert:
                         alert("Fehler bei der KI-Verarbeitung: " + (error.message || error));
                     }
                     
